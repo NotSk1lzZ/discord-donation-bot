@@ -8,11 +8,11 @@ import os
 import asyncio
 import re
 
-# Load environment variables from Render (configured in the dashboard)
+# Environment variables (from Render's dashboard)
 TOKEN = os.getenv("TOKEN")
 GOAL_AMOUNT = int(os.getenv("GOAL", 2000))
 GFM_URL = os.getenv("GFM_URL")
-CHANNEL_ID = int(os.getenv("CHANNEL_ID", 1234567890))
+CHANNEL_ID = int(os.getenv("CHANNEL_ID", 123456789012345678))
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -21,7 +21,7 @@ def scrape_gfm_total():
     try:
         response = requests.get(GFM_URL)
         if response.status_code != 200:
-            print(f"Failed to fetch page, status code: {response.status_code}")
+            print(f"❌ Failed to fetch page. Status: {response.status_code}")
             return None
 
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -34,13 +34,12 @@ def scrape_gfm_total():
             amount_str = match.group(1).replace(",", "").replace(".", "")
             return int(amount_str)
 
-        print("Donation amount not found in visible text.")
+        print("❌ Donation amount not found in visible text.")
         return None
     except Exception as e:
-        print(f"Error scraping GoFundMe: {e}")
+        print(f"❗ Error scraping GoFundMe: {e}")
         return None
 
-# Format donation progress into a Discord embed
 def format_bar_embed(current, goal):
     percent = min(100, int((current / goal) * 100))
     filled_blocks = int(percent / 10)
@@ -56,33 +55,46 @@ def format_bar_embed(current, goal):
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user.name}")
+    print(f"✅ Logged in as {bot.user.name}")
+    print("⏳ Starting update_progress loop...")
     update_progress.start()
 
 @tasks.loop(minutes=5)
 async def update_progress():
-    channel = bot.get_channel(CHANNEL_ID)
-    if not channel:
-        print("Channel not found")
-        return
+    try:
+        print("🔁 Running update_progress...")
+        channel = bot.get_channel(CHANNEL_ID)
+        if not channel:
+            print("❌ Channel not found")
+            return
 
-    total = scrape_gfm_total() or 0
-    embed = format_bar_embed(total, GOAL_AMOUNT)
+        total = scrape_gfm_total() or 0
+        embed = format_bar_embed(total, GOAL_AMOUNT)
 
-    message = None
-    async for msg in channel.history(limit=50):
-        if msg.author == bot.user and msg.embeds:
-            message = msg
-            break
+        message = None
+        async for msg in channel.history(limit=50):
+            if msg.author == bot.user and msg.embeds:
+                message = msg
+                break
 
-    if message:
-        await message.edit(embed=embed)
-    else:
-        msg = await channel.send(embed=embed)
-        await msg.pin()
+        if message:
+            print("✏️ Editing existing pinned message...")
+            await message.edit(embed=embed)
+        else:
+            print("📌 Sending and pinning new message...")
+            msg = await channel.send(embed=embed)
+            await msg.pin()
 
-# Start web server (for Render's public port)
+    except Exception as e:
+        print(f"❗ Error in update_progress: {e}")
+
+@bot.command()
+async def forceupdate(ctx):
+    await ctx.send("🔄 Forcing update...")
+    await update_progress()
+
+# Start the web server (needed by Render)
 keep_alive()
 
-# Start the Discord bot
+# Launch the bot
 bot.run(TOKEN)

@@ -5,10 +5,10 @@ from discord.ext import commands, tasks
 import requests
 from bs4 import BeautifulSoup
 import os
-import json
 import asyncio
 import re
 
+# Load environment variables from Render (configured in the dashboard)
 TOKEN = os.getenv("TOKEN")
 GOAL_AMOUNT = int(os.getenv("GOAL", 2000))
 GFM_URL = os.getenv("GFM_URL")
@@ -26,6 +26,7 @@ def scrape_gfm_total():
 
         soup = BeautifulSoup(response.text, 'html.parser')
         text = soup.get_text()
+
         match = re.search(r"€\s?([\d,\.]+)\s*(raised|gesammelt)", text, re.IGNORECASE)
         if not match:
             match = re.search(r"([\d,\.]+)\s*€\s*(raised|gesammelt)", text, re.IGNORECASE)
@@ -39,17 +40,16 @@ def scrape_gfm_total():
         print(f"Error scraping GoFundMe: {e}")
         return None
 
-from discord import Embed
-
+# Format donation progress into a Discord embed
 def format_bar_embed(current, goal):
     percent = min(100, int((current / goal) * 100))
     filled_blocks = int(percent / 10)
     bar = "█" * filled_blocks + "░" * (10 - filled_blocks)
-    
-    embed = Embed(
+
+    embed = discord.Embed(
         title="🎯 Donation Progress",
         description=f"**€{current:,} / €{goal:,}**\n`{bar}` {percent}%",
-        color=0x00BFFF  # optional: light blue
+        color=0x00BFFF
     )
     embed.set_footer(text="Updated every 5 minutes")
     return embed
@@ -66,22 +66,23 @@ async def update_progress():
         print("Channel not found")
         return
 
-    total = scrape_gfm_total()
-    embed = format_bar_embed(total, GOAL_AMOUNT) if total else "Unable to scrape donation data."
+    total = scrape_gfm_total() or 0
+    embed = format_bar_embed(total, GOAL_AMOUNT)
 
     message = None
     async for msg in channel.history(limit=50):
-        if msg.author == bot.user and "🎯 Goal:" in msg.content:
+        if msg.author == bot.user and msg.embeds:
             message = msg
             break
 
     if message:
-    await message.edit(embed=embed)
+        await message.edit(embed=embed)
     else:
-    msg = await channel.send(embed=embed)
+        msg = await channel.send(embed=embed)
+        await msg.pin()
 
-# Start web server to keep app alive
+# Start web server (for Render's public port)
 keep_alive()
 
-# Start bot
-bot.run(TOKEN)# main bot file placeholder
+# Start the Discord bot
+bot.run(TOKEN)

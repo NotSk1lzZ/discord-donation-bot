@@ -8,7 +8,7 @@ import os
 import asyncio
 import re
 
-# Environment variables (from Render's dashboard)
+# Load environment variables from Render dashboard
 TOKEN = os.getenv("TOKEN")
 GOAL_AMOUNT = int(os.getenv("GOAL", 2000))
 GFM_URL = os.getenv("GFM_URL")
@@ -17,6 +17,7 @@ CHANNEL_ID = int(os.getenv("CHANNEL_ID", 123456789012345678))
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# 🧠 Scrape GoFundMe total
 def scrape_gfm_total():
     try:
         response = requests.get(GFM_URL)
@@ -30,6 +31,7 @@ def scrape_gfm_total():
         match = re.search(r"€\s?([\d,\.]+)\s*(raised|gesammelt)", text, re.IGNORECASE)
         if not match:
             match = re.search(r"([\d,\.]+)\s*€\s*(raised|gesammelt)", text, re.IGNORECASE)
+
         if match:
             amount_str = match.group(1).replace(",", "").replace(".", "")
             return int(amount_str)
@@ -40,6 +42,7 @@ def scrape_gfm_total():
         print(f"❗ Error scraping GoFundMe: {e}")
         return None
 
+# 🎯 Format donation progress as a Discord embed
 def format_bar_embed(current, goal):
     percent = min(100, int((current / goal) * 100))
     filled_blocks = int(percent / 10)
@@ -50,16 +53,18 @@ def format_bar_embed(current, goal):
         description=f"**€{current:,} / €{goal:,}**\n`{bar}` {percent}%",
         color=0x00BFFF
     )
-    embed.set_footer(text="Updated every 5 minutes")
+    embed.set_footer(text="Updated every 1 minute")
     return embed
 
+# ✅ When bot is ready, start the update loop
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user.name}")
     print("⏳ Starting update_progress loop...")
     update_progress.start()
 
-@tasks.loop(minutes=5)
+# 🔁 This runs every 1 minute
+@tasks.loop(minutes=1)
 async def update_progress():
     try:
         print("🔁 Running update_progress...")
@@ -88,13 +93,14 @@ async def update_progress():
     except Exception as e:
         print(f"❗ Error in update_progress: {e}")
 
+# 🔄 Manual command to trigger update
 @bot.command()
 async def forceupdate(ctx):
     await ctx.send("🔄 Forcing update...")
     await update_progress()
 
-# Start the web server (needed by Render)
+# 🌐 Keep Render service alive (used with cron-job.org)
 keep_alive()
 
-# Launch the bot
+# ▶️ Run the bot
 bot.run(TOKEN)

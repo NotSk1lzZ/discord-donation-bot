@@ -39,11 +39,20 @@ def scrape_gfm_total():
         print(f"Error scraping GoFundMe: {e}")
         return None
 
-def format_bar(current, goal):
+from discord import Embed
+
+def format_bar_embed(current, goal):
     percent = min(100, int((current / goal) * 100))
     filled_blocks = int(percent / 10)
-    bar = "[" + "█" * filled_blocks + "░" * (10 - filled_blocks) + f"] {percent}%"
-    return f"🎯 Goal: €{int(current)} / €{int(goal)}\n{bar}"
+    bar = "█" * filled_blocks + "░" * (10 - filled_blocks)
+    
+    embed = Embed(
+        title="🎯 Donation Progress",
+        description=f"**€{current:,} / €{goal:,}**\n`{bar}` {percent}%",
+        color=0x00BFFF  # optional: light blue
+    )
+    embed.set_footer(text="Updated every 5 minutes")
+    return embed
 
 @bot.event
 async def on_ready():
@@ -58,7 +67,7 @@ async def update_progress():
         return
 
     total = scrape_gfm_total()
-    content = format_bar(total, GOAL_AMOUNT) if total else "Unable to scrape donation data."
+    embed = format_bar_embed(total, GOAL_AMOUNT) if total else "Unable to scrape donation data."
 
     message = None
     async for msg in channel.history(limit=50):
@@ -67,10 +76,9 @@ async def update_progress():
             break
 
     if message:
-        await message.edit(content=content)
+    await message.edit(embed=embed)
     else:
-        msg = await channel.send(content)
-        await msg.pin()
+    msg = await channel.send(embed=embed)
 
 # Start web server to keep app alive
 keep_alive()
